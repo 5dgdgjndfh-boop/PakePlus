@@ -1,0 +1,1502 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>几何迷境 · Monument Valley Style 3D Puzzle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              display: ['Quicksand', 'sans-serif'],
+            },
+            colors: {
+              'morandi-bg':      'hsl(40, 20%, 94%)',
+              'morandi-surface': 'hsl(30, 15%, 90%)',
+              'morandi-blue':    'hsl(210, 25%, 65%)',
+              'morandi-pink':    'hsl(10, 30%, 78%)',
+              'morandi-green':   'hsl(120, 15%, 72%)',
+              'morandi-yellow':  'hsl(45, 35%, 82%)',
+              'morandi-dark':    'hsl(220, 10%, 38%)',
+              'morandi-muted':   'hsl(210, 8%, 55%)',
+              'morandi-border':  'hsl(30, 10%, 85%)',
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      img, video { max-width: 100%; height: auto; display: block; }
+      body { overflow-wrap: break-word; margin: 0; }
+
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: 'Quicksand', sans-serif;
+        background: hsl(40, 20%, 94%);
+        color: hsl(220, 10%, 38%);
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #gameCanvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+      }
+      #gameCanvas:active { cursor: grabbing; }
+
+      /* Screen fade transitions */
+      .screen {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.6s ease;
+        z-index: 10;
+      }
+      .screen.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* Button styling */
+      .btn-primary {
+        padding: 0.85rem 2.2rem;
+        background: hsl(210, 25%, 65%);
+        color: white;
+        border: none;
+        border-radius: 999px;
+        font-family: 'Quicksand', sans-serif;
+        font-weight: 600;
+        font-size: 1.05rem;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        box-shadow: 0 4px 16px hsla(210, 25%, 65%, 0.4);
+        letter-spacing: 0.05em;
+      }
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px hsla(210, 25%, 65%, 0.5);
+        background: hsl(210, 28%, 70%);
+      }
+      .btn-primary:active { transform: translateY(0); }
+
+      .btn-secondary {
+        padding: 0.7rem 1.8rem;
+        background: transparent;
+        color: hsl(220, 10%, 38%);
+        border: 2px solid hsl(220, 10%, 38%);
+        border-radius: 999px;
+        font-family: 'Quicksand', sans-serif;
+        font-weight: 500;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        letter-spacing: 0.05em;
+      }
+      .btn-secondary:hover {
+        background: hsl(220, 10%, 38%);
+        color: white;
+      }
+
+      .btn-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: hsla(40, 20%, 94%, 0.85);
+        backdrop-filter: blur(8px);
+        border: 1px solid hsl(30, 10%, 85%);
+        color: hsl(220, 10%, 38%);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px hsla(220, 10%, 38%, 0.08);
+      }
+      .btn-icon:hover {
+        background: white;
+        transform: scale(1.08);
+      }
+
+      /* Title styling */
+      .game-title {
+        font-size: clamp(2.5rem, 6vw, 4.5rem);
+        font-weight: 300;
+        letter-spacing: 0.3em;
+        color: hsl(220, 10%, 38%);
+        margin-bottom: 0.5rem;
+        text-align: center;
+      }
+      .game-subtitle {
+        font-size: clamp(0.9rem, 2vw, 1.1rem);
+        color: hsl(210, 8%, 55%);
+        letter-spacing: 0.2em;
+        margin-bottom: 3rem;
+        font-weight: 400;
+      }
+
+      /* Level cards */
+      .level-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        margin: 2rem 0;
+      }
+      @media (max-width: 640px) {
+        .level-grid { gap: 1rem; }
+      }
+      .level-card {
+        width: 120px;
+        height: 120px;
+        border-radius: 20px;
+        background: white;
+        border: 2px solid hsl(30, 10%, 85%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px hsla(220, 10%, 38%, 0.06);
+      }
+      .level-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px hsla(220, 10%, 38%, 0.1);
+        border-color: hsl(210, 25%, 65%);
+      }
+      .level-card.locked {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .level-card.locked:hover { transform: none; border-color: hsl(30, 10%, 85%); }
+      .level-card.completed {
+        border-color: hsl(120, 15%, 72%);
+      }
+      .level-num {
+        font-size: 2rem;
+        font-weight: 300;
+        color: hsl(220, 10%, 38%);
+      }
+      .level-name {
+        font-size: 0.8rem;
+        color: hsl(210, 8%, 55%);
+        margin-top: 0.25rem;
+        letter-spacing: 0.1em;
+      }
+
+      /* HUD */
+      .hud-top {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 1.2rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 5;
+        pointer-events: none;
+      }
+      .hud-top > * { pointer-events: auto; }
+      .hud-left, .hud-right {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+      }
+      .hud-level {
+        background: hsla(40, 20%, 94%, 0.85);
+        backdrop-filter: blur(8px);
+        border: 1px solid hsl(30, 10%, 85%);
+        border-radius: 999px;
+        padding: 0.5rem 1.2rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: hsl(220, 10%, 38%);
+        box-shadow: 0 2px 8px hsla(220, 10%, 38%, 0.06);
+      }
+
+      /* Win panel */
+      .win-panel {
+        background: white;
+        border-radius: 28px;
+        padding: 3rem 4rem;
+        text-align: center;
+        box-shadow: 0 20px 60px hsla(220, 10%, 38%, 0.15);
+        animation: panelIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes panelIn {
+        from { opacity: 0; transform: scale(0.8) translateY(20px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      .win-title {
+        font-size: 2.2rem;
+        font-weight: 300;
+        letter-spacing: 0.2em;
+        margin-bottom: 0.5rem;
+        color: hsl(220, 10%, 38%);
+      }
+      .win-sub {
+        color: hsl(210, 8%, 55%);
+        margin-bottom: 2rem;
+        letter-spacing: 0.1em;
+      }
+      .win-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      /* Hint text */
+      .hint-text {
+        position: absolute;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: hsla(40, 20%, 94%, 0.9);
+        backdrop-filter: blur(8px);
+        border: 1px solid hsl(30, 10%, 85%);
+        border-radius: 999px;
+        padding: 0.6rem 1.5rem;
+        font-size: 0.85rem;
+        color: hsl(210, 8%, 55%);
+        z-index: 5;
+        letter-spacing: 0.05em;
+        animation: hintPulse 2s ease-in-out infinite;
+      }
+      @keyframes hintPulse {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+      }
+
+      /* Mobile controls */
+      .mobile-controls {
+        position: absolute;
+        bottom: 2rem;
+        right: 2rem;
+        display: none;
+        z-index: 5;
+      }
+      @media (max-width: 768px) {
+        .mobile-controls { display: block; }
+        .hint-text { display: none; }
+      }
+      .dpad {
+        display: grid;
+        grid-template-columns: repeat(3, 56px);
+        grid-template-rows: repeat(3, 56px);
+        gap: 4px;
+      }
+      .dpad-btn {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: hsla(40, 20%, 94%, 0.9);
+        backdrop-filter: blur(8px);
+        border: 1px solid hsl(30, 10%, 85%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        color: hsl(220, 10%, 38%);
+      }
+      .dpad-btn:active {
+        background: hsl(210, 25%, 65%);
+        color: white;
+        transform: scale(0.95);
+      }
+      .dpad-up    { grid-column: 2; grid-row: 1; }
+      .dpad-left  { grid-column: 1; grid-row: 2; }
+      .dpad-right { grid-column: 3; grid-row: 2; }
+      .dpad-down  { grid-column: 2; grid-row: 3; }
+
+      /* Decorative floating shapes for menu */
+      .float-shape {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0.6;
+        animation: float 6s ease-in-out infinite;
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-20px) rotate(5deg); }
+      }
+
+      /* Sound toggle indicator */
+      .sound-off { opacity: 0.4; }
+
+      /* Level select back button */
+      .back-row {
+        position: absolute;
+        top: 1.5rem;
+        left: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- ============ MENU SCREEN ============ -->
+    <div id="menuScreen" class="screen active">
+      <div class="float-shape" style="width:120px;height:120px;background:hsl(10,30%,78%);top:10%;left:8%;animation-delay:0s;"></div>
+      <div class="float-shape" style="width:80px;height:80px;background:hsl(120,15%,72%);top:20%;right:12%;animation-delay:1s;border-radius:30%;"></div>
+      <div class="float-shape" style="width:60px;height:60px;background:hsl(45,35%,82%);bottom:25%;left:15%;animation-delay:2s;border-radius:40%;"></div>
+      <div class="float-shape" style="width:100px;height:100px;background:hsl(210,25%,65%);bottom:15%;right:10%;animation-delay:0.5s;opacity:0.4;"></div>
+
+      <h1 class="game-title">几何迷境</h1>
+      <p class="game-subtitle">GEOMETRIC MAZE</p>
+      <div style="display:flex;flex-direction:column;gap:1rem;align-items:center;">
+        <button class="btn-primary" id="startBtn">开始游戏</button>
+        <button class="btn-secondary" id="levelSelectBtn">关卡选择</button>
+      </div>
+      <p style="position:absolute;bottom:1.5rem;font-size:0.8rem;color:hsl(210,8%,55%);letter-spacing:0.1em;">
+        WASD / 方向键移动 · 鼠标拖拽旋转视角 · 点击机关
+      </p>
+    </div>
+
+    <!-- ============ LEVEL SELECT SCREEN ============ -->
+    <div id="levelScreen" class="screen">
+      <div class="back-row">
+        <button class="btn-icon" id="backToMenuBtn" aria-label="返回">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+      </div>
+      <h2 style="font-size:1.8rem;font-weight:300;letter-spacing:0.2em;margin-bottom:0.5rem;">选择关卡</h2>
+      <p style="color:hsl(210,8%,55%);margin-bottom:1rem;font-size:0.9rem;">LEVEL SELECT</p>
+      <div class="level-grid" id="levelGrid"></div>
+    </div>
+
+    <!-- ============ HUD ============ -->
+    <div class="hud-top" id="gameHud" style="display:none;">
+      <div class="hud-left">
+        <button class="btn-icon" id="menuBtn" aria-label="返回菜单">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+        <div class="hud-level" id="hudLevel">第 1 关 · 初见</div>
+      </div>
+      <div class="hud-right">
+        <button class="btn-icon" id="soundBtn" aria-label="音效开关">
+          <svg id="soundOnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+          <svg id="soundOffIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <button class="btn-icon" id="resetBtn" aria-label="重置关卡">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Hint -->
+    <div class="hint-text" id="hintText" style="display:none;">WASD 移动 · 鼠标拖拽视角 · 点击发光机关</div>
+
+    <!-- Mobile D-pad -->
+    <div class="mobile-controls" id="mobileControls" style="display:none;">
+      <div class="dpad">
+        <button class="dpad-btn dpad-up" data-dir="up">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button class="dpad-btn dpad-left" data-dir="left">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="dpad-btn dpad-right" data-dir="right">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="dpad-btn dpad-down" data-dir="down">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ WIN SCREEN ============ -->
+    <div id="winScreen" class="screen" style="background:hsla(40,20%,94%,0.6);backdrop-filter:blur(4px);">
+      <div class="win-panel">
+        <div style="font-size:3rem;margin-bottom:0.5rem;">✦</div>
+        <h2 class="win-title">通关成功</h2>
+        <p class="win-sub" id="winSubtitle">第 1 关 · 初见</p>
+        <div class="win-buttons">
+          <button class="btn-secondary" id="replayBtn">重玩本关</button>
+          <button class="btn-primary" id="nextLevelBtn">下一关</button>
+        </div>
+        <button class="btn-secondary" id="winMenuBtn" style="margin-top:1rem;">返回菜单</button>
+      </div>
+    </div>
+
+    <script>
+    // ============================================================
+    //  GEOMETRIC MAZE — Monument Valley style 3D puzzle game
+    //  Single-file implementation with Three.js
+    // ============================================================
+
+    // ---------- Constants ----------
+    const TILE_SIZE = 1.5;
+    const TILE_HEIGHT = 0.6;
+    const PLAYER_SPEED = 4; // tiles per second
+    const MOVE_EASE = 0.15;
+
+    // Morandi color palette (hex for Three.js)
+    const COLORS = {
+      bg:        0xf2ede2, // morandi-bg
+      platform:  0xe8ddd0, // morandi-surface
+      platformTop: 0xf5efe6,
+      accent:    0xa3b5cc, // morandi-blue
+      pink:      0xd9b8b0, // morandi-pink
+      green:     0xb8c4b8, // morandi-green
+      yellow:    0xe8d9b8, // morandi-yellow
+      dark:      0x5c6370, // morandi-dark
+      player:    0xe07a5f, // warm terracotta for contrast
+      goal:      0xf2c98f, // warm gold glow
+      mechanism: 0xc9a87c, // warm brown for interactive tiles
+    };
+
+    // ---------- Game State ----------
+    const GameState = {
+      MENU: 'menu',
+      LEVEL_SELECT: 'levelSelect',
+      PLAYING: 'playing',
+      WIN: 'win',
+    };
+
+    let state = GameState.MENU;
+    let currentLevel = 0;
+    let soundEnabled = true;
+    let completedLevels = [];
+
+    // ---------- Audio System (Web Audio API) ----------
+    let audioCtx = null;
+    let bgmOscillators = [];
+    let bgmGain = null;
+    let bgmStarted = false;
+
+    function initAudio() {
+      if (audioCtx) return;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        soundEnabled = false;
+      }
+    }
+
+    function playTone(freq, duration, type = 'sine', volume = 0.1) {
+      if (!soundEnabled || !audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playMoveSound() {
+      playTone(520, 0.08, 'sine', 0.06);
+    }
+
+    function playMechanismSound() {
+      playTone(330, 0.12, 'triangle', 0.08);
+      setTimeout(() => playTone(440, 0.15, 'triangle', 0.07), 80);
+    }
+
+    function playWinSound() {
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((f, i) => {
+        setTimeout(() => playTone(f, 0.3, 'sine', 0.08), i * 120);
+      });
+    }
+
+    function playClickSound() {
+      playTone(800, 0.05, 'sine', 0.05);
+    }
+
+    function startBGM() {
+      if (!soundEnabled || !audioCtx || bgmStarted) return;
+      bgmStarted = true;
+      bgmGain = audioCtx.createGain();
+      bgmGain.gain.value = 0.025;
+      bgmGain.connect(audioCtx.destination);
+
+      // Simple ambient pad: two detuned oscillators with slow LFO
+      const freqs = [130.81, 196.00, 261.63]; // C3, G3, C4
+      freqs.forEach((f, i) => {
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        const oscGain = audioCtx.createGain();
+        oscGain.gain.value = 0.3;
+        osc.connect(oscGain);
+        oscGain.connect(bgmGain);
+        osc.start();
+        bgmOscillators.push(osc);
+
+        // Slow amplitude LFO
+        const lfo = audioCtx.createOscillator();
+        lfo.frequency.value = 0.1 + i * 0.07;
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 0.15;
+        lfo.connect(lfoGain);
+        lfoGain.connect(oscGain.gain);
+        lfo.start();
+        bgmOscillators.push(lfo);
+      });
+    }
+
+    function stopBGM() {
+      bgmStarted = false;
+      if (bgmGain) {
+        bgmGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('soundOnIcon').style.display = soundEnabled ? 'block' : 'none';
+      document.getElementById('soundOffIcon').style.display = soundEnabled ? 'none' : 'block';
+      document.getElementById('soundBtn').classList.toggle('sound-off', !soundEnabled);
+      if (soundEnabled) {
+        startBGM();
+      } else {
+        stopBGM();
+      }
+    }
+
+    // ---------- Level Definitions ----------
+    // Each level is a grid of tiles. Tile types:
+    //   0 = empty
+    //   1 = normal platform (walkable)
+    //   2 = start position
+    //   3 = goal
+    //   4 = rotatable bridge (mechanism, rotates 90°)
+    //   5 = elevator platform (goes up/down)
+    // Height is per-tile (integer grid units)
+
+    const LEVELS = [
+      // Level 1: "初见" — Simple intro with stairs
+      {
+        name: '初见',
+        subtitle: 'First Steps',
+        gridSize: { w: 7, d: 6 },
+        tiles: [
+          // format: { x, z, h, type }
+          { x: 0, z: 2, h: 0, type: 2 }, // start
+          { x: 1, z: 2, h: 0, type: 1 },
+          { x: 2, z: 2, h: 0, type: 1 },
+          { x: 2, z: 3, h: 0, type: 1 },
+          { x: 3, z: 3, h: 1, type: 1 },
+          { x: 4, z: 3, h: 2, type: 1 },
+          { x: 5, z: 3, h: 2, type: 1 },
+          { x: 5, z: 2, h: 2, type: 1 },
+          { x: 6, z: 2, h: 2, type: 3 }, // goal
+        ],
+        mechanisms: [],
+        cameraPos: { x: 8, y: 10, z: 10 },
+        hint: '使用 WASD 或方向键移动，到达发光的终点',
+      },
+
+      // Level 2: "旋转" — Rotatable bridge
+      {
+        name: '旋转',
+        subtitle: 'The Rotation',
+        gridSize: { w: 8, d: 7 },
+        tiles: [
+          { x: 0, z: 3, h: 0, type: 2 }, // start
+          { x: 1, z: 3, h: 0, type: 1 },
+          { x: 2, z: 3, h: 0, type: 1 },
+          // Gap with rotatable bridge at (3,3)
+          { x: 3, z: 3, h: 0, type: 4, id: 'bridge1', dir: 0 }, // rotatable
+          { x: 4, z: 3, h: 0, type: 1 },
+          { x: 5, z: 3, h: 0, type: 1 },
+          { x: 5, z: 2, h: 0, type: 1 },
+          { x: 5, z: 1, h: 1, type: 1 },
+          { x: 5, z: 0, h: 2, type: 1 },
+          { x: 6, z: 0, h: 2, type: 1 },
+          { x: 7, z: 0, h: 2, type: 3 }, // goal
+          // Side platform for decoration / alternative path hint
+          { x: 3, z: 2, h: 0, type: 1 },
+          { x: 3, z: 4, h: 0, type: 1 },
+        ],
+        mechanisms: [
+          { id: 'bridge1', type: 'rotator', tileX: 3, tileZ: 3, rotation: 0 },
+        ],
+        cameraPos: { x: 9, y: 11, z: 11 },
+        hint: '点击发光的旋转平台，让桥梁连接路径',
+      },
+
+      // Level 3: "升降" — Elevators + multi-mechanism
+      {
+        name: '升降',
+        subtitle: 'Ascension',
+        gridSize: { w: 9, d: 8 },
+        tiles: [
+          { x: 0, z: 4, h: 0, type: 2 }, // start
+          { x: 1, z: 4, h: 0, type: 1 },
+          { x: 2, z: 4, h: 0, type: 1 },
+          // Elevator 1
+          { x: 3, z: 4, h: 0, type: 5, id: 'elev1', baseH: 0, topH: 2 },
+          { x: 4, z: 4, h: 2, type: 1 },
+          { x: 4, z: 3, h: 2, type: 1 },
+          { x: 4, z: 2, h: 2, type: 1 },
+          // Rotatable bridge high up
+          { x: 4, z: 1, h: 2, type: 4, id: 'bridge2', dir: 0 },
+          { x: 4, z: 0, h: 2, type: 1 },
+          { x: 5, z: 0, h: 2, type: 1 },
+          { x: 6, z: 0, h: 2, type: 1 },
+          // Second elevator
+          { x: 7, z: 0, h: 2, type: 5, id: 'elev2', baseH: 2, topH: 4 },
+          { x: 8, z: 0, h: 4, type: 3 }, // goal at top
+          // Decorative side platforms
+          { x: 2, z: 3, h: 0, type: 1 },
+          { x: 2, z: 5, h: 0, type: 1 },
+          { x: 6, z: 1, h: 2, type: 1 },
+        ],
+        mechanisms: [
+          { id: 'elev1', type: 'elevator', tileX: 3, tileZ: 4, baseH: 0, topH: 2, currentH: 0, moving: false },
+          { id: 'elev2', type: 'elevator', tileX: 7, tileZ: 0, baseH: 2, topH: 4, currentH: 2, moving: false },
+          { id: 'bridge2', type: 'rotator', tileX: 4, tileZ: 1, rotation: 0 },
+        ],
+        cameraPos: { x: 11, y: 13, z: 12 },
+        hint: '点击升降平台改变高度，旋转桥梁连通路径',
+      },
+    ];
+
+    // ---------- Three.js Setup ----------
+    const canvas = document.getElementById('gameCanvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(COLORS.bg);
+    scene.fog = new THREE.Fog(COLORS.bg, 20, 45);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(8, 10, 10);
+
+    // Controls
+    const controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 5;
+    controls.maxDistance = 25;
+    controls.maxPolarAngle = Math.PI / 2.1;
+    controls.target.set(0, 0, 0);
+    controls.enablePan = false;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(8, 15, 6);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 50;
+    dirLight.shadow.camera.left = -15;
+    dirLight.shadow.camera.right = 15;
+    dirLight.shadow.camera.top = 15;
+    dirLight.shadow.camera.bottom = -15;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xd9c8b8, 0.3);
+    fillLight.position.set(-5, 5, -5);
+    scene.add(fillLight);
+
+    // ---------- Level Building ----------
+    let levelGroup = null;
+    let tileMap = {}; // key "x,z" -> tile data
+    let mechanismMap = {}; // id -> mechanism object
+    let player = null;
+    let playerPos = { x: 0, z: 0, h: 0 }; // grid coords + height
+    let playerTarget = null; // { x, z, h } for smooth movement
+    let playerMoving = false;
+    let goalTile = null;
+
+    function gridToWorld(x, z, h = 0) {
+      return {
+        x: x * TILE_SIZE,
+        y: h * TILE_HEIGHT + TILE_HEIGHT / 2,
+        z: z * TILE_SIZE,
+      };
+    }
+
+    function tileKey(x, z) {
+      return `${x},${z}`;
+    }
+
+    function createTileMesh(tileData) {
+      const group = new THREE.Group();
+      const { x, z, h, type } = tileData;
+      const pos = gridToWorld(x, z, h);
+
+      // Base platform
+      const baseGeo = new THREE.BoxGeometry(TILE_SIZE * 0.95, TILE_HEIGHT, TILE_SIZE * 0.95);
+      let baseColor = COLORS.platform;
+      let topColor = COLORS.platformTop;
+
+      if (type === 2) { // start
+        baseColor = COLORS.green;
+        topColor = 0xc8d4c8;
+      } else if (type === 3) { // goal
+        baseColor = COLORS.yellow;
+        topColor = COLORS.goal;
+      } else if (type === 4) { // rotator
+        baseColor = COLORS.mechanism;
+        topColor = 0xd4b88c;
+      } else if (type === 5) { // elevator
+        baseColor = COLORS.accent;
+        topColor = 0xb8c8dc;
+      }
+
+      const baseMat = new THREE.MeshLambertMaterial({ color: baseColor });
+      const base = new THREE.Mesh(baseGeo, baseMat);
+      base.position.y = 0;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      group.add(base);
+
+      // Top face (slightly lighter)
+      const topGeo = new THREE.BoxGeometry(TILE_SIZE * 0.9, TILE_HEIGHT * 0.15, TILE_SIZE * 0.9);
+      const topMat = new THREE.MeshLambertMaterial({ color: topColor });
+      const top = new THREE.Mesh(topGeo, topMat);
+      top.position.y = TILE_HEIGHT * 0.45;
+      top.castShadow = true;
+      top.receiveShadow = true;
+      group.add(top);
+
+      // Pillar below for visual depth (only for non-ground-level tiles)
+      if (h > 0) {
+        const pillarGeo = new THREE.BoxGeometry(TILE_SIZE * 0.7, h * TILE_HEIGHT, TILE_SIZE * 0.7);
+        const pillarMat = new THREE.MeshLambertMaterial({ color: baseColor });
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        pillar.position.y = -(h * TILE_HEIGHT) / 2 - TILE_HEIGHT / 2 + TILE_HEIGHT * 0.1;
+        pillar.castShadow = true;
+        pillar.receiveShadow = true;
+        group.add(pillar);
+      }
+
+      // Goal marker — glowing cube on top
+      if (type === 3) {
+        const goalGeo = new THREE.OctahedronGeometry(TILE_SIZE * 0.25, 0);
+        const goalMat = new THREE.MeshBasicMaterial({ color: COLORS.goal });
+        const goal = new THREE.Mesh(goalGeo, goalMat);
+        goal.position.y = TILE_HEIGHT * 0.9;
+        goal.name = 'goalMarker';
+        group.add(goal);
+
+        // Point light for glow
+        const goalLight = new THREE.PointLight(COLORS.goal, 0.6, 4);
+        goalLight.position.y = TILE_HEIGHT * 0.9;
+        goalLight.name = 'goalLight';
+        group.add(goalLight);
+      }
+
+      // Mechanism indicator
+      if (type === 4 || type === 5) {
+        const indicatorGeo = new THREE.TorusGeometry(TILE_SIZE * 0.25, 0.04, 8, 24);
+        const indicatorMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+        const indicator = new THREE.Mesh(indicatorGeo, indicatorMat);
+        indicator.rotation.x = Math.PI / 2;
+        indicator.position.y = TILE_HEIGHT * 0.85;
+        indicator.name = 'mechIndicator';
+        group.add(indicator);
+      }
+
+      // Rotator: add bridge shape
+      if (type === 4) {
+        const bridgeGeo = new THREE.BoxGeometry(TILE_SIZE * 1.8, TILE_HEIGHT * 0.4, TILE_SIZE * 0.5);
+        const bridgeMat = new THREE.MeshLambertMaterial({ color: COLORS.mechanism });
+        const bridge = new THREE.Mesh(bridgeGeo, bridgeMat);
+        bridge.position.y = TILE_HEIGHT * 0.3;
+        bridge.name = 'bridgeMesh';
+        bridge.castShadow = true;
+        group.add(bridge);
+      }
+
+      group.position.set(pos.x, pos.y - TILE_HEIGHT / 2, pos.z);
+      group.userData = { tileData, isTile: true };
+      return group;
+    }
+
+    function createPlayer() {
+      const group = new THREE.Group();
+
+      // Body (cone)
+      const bodyGeo = new THREE.ConeGeometry(0.28, 0.7, 8);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: COLORS.player });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.35;
+      body.castShadow = true;
+      group.add(body);
+
+      // Head (sphere)
+      const headGeo = new THREE.SphereGeometry(0.22, 12, 12);
+      const headMat = new THREE.MeshLambertMaterial({ color: 0xf0d5c0 });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = 0.85;
+      head.castShadow = true;
+      group.add(head);
+
+      // Hat (small cone)
+      const hatGeo = new THREE.ConeGeometry(0.18, 0.25, 8);
+      const hatMat = new THREE.MeshLambertMaterial({ color: COLORS.dark });
+      const hat = new THREE.Mesh(hatGeo, hatMat);
+      hat.position.y = 1.1;
+      hat.castShadow = true;
+      group.add(hat);
+
+      group.name = 'player';
+      return group;
+    }
+
+    function buildLevel(levelIndex) {
+      // Clear previous level
+      if (levelGroup) {
+        scene.remove(levelGroup);
+        levelGroup.traverse(obj => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+            else obj.material.dispose();
+          }
+        });
+      }
+
+      levelGroup = new THREE.Group();
+      tileMap = {};
+      mechanismMap = {};
+      goalTile = null;
+
+      const level = LEVELS[levelIndex];
+
+      // Build tiles
+      level.tiles.forEach(tile => {
+        const mesh = createTileMesh(tile);
+        levelGroup.add(mesh);
+        tileMap[tileKey(tile.x, tile.z)] = {
+          ...tile,
+          mesh,
+          currentH: tile.h,
+        };
+        if (tile.type === 2) {
+          playerPos = { x: tile.x, z: tile.z, h: tile.h };
+        }
+        if (tile.type === 3) {
+          goalTile = tile;
+        }
+      });
+
+      // Build mechanisms
+      if (level.mechanisms) {
+        level.mechanisms.forEach(mech => {
+          mechanismMap[mech.id] = { ...mech };
+        });
+      }
+
+      // Create player
+      if (player) {
+        scene.remove(player);
+      }
+      player = createPlayer();
+      const wp = gridToWorld(playerPos.x, playerPos.z, playerPos.h);
+      player.position.set(wp.x, wp.y, wp.z);
+      levelGroup.add(player);
+
+      // Center level group
+      const offsetX = -level.gridSize.w * TILE_SIZE / 2 + TILE_SIZE / 2;
+      const offsetZ = -level.gridSize.d * TILE_SIZE / 2 + TILE_SIZE / 2;
+      levelGroup.position.set(offsetX, 0, offsetZ);
+
+      scene.add(levelGroup);
+
+      // Set camera
+      camera.position.set(level.cameraPos.x, level.cameraPos.y, level.cameraPos.z);
+      controls.target.set(0, 1, 0);
+      controls.update();
+
+      // Reset movement state
+      playerMoving = false;
+      playerTarget = null;
+    }
+
+    // ---------- Movement & Mechanics ----------
+    function getTileAt(x, z) {
+      return tileMap[tileKey(x, z)];
+    }
+
+    function getTileHeight(x, z) {
+      const tile = getTileAt(x, z);
+      if (!tile) return null;
+      return tile.currentH !== undefined ? tile.currentH : tile.h;
+    }
+
+    function canMoveTo(fromX, fromZ, toX, toZ) {
+      const fromTile = getTileAt(fromX, fromZ);
+      const toTile = getTileAt(toX, toZ);
+      if (!fromTile || !toTile) return false;
+
+      const fromH = getTileHeight(fromX, fromZ);
+      const toH = getTileHeight(toX, toZ);
+      if (fromH === null || toH === null) return false;
+
+      // Height difference must be <= 1
+      if (Math.abs(fromH - toH) > 1) return false;
+
+      // For rotator bridges: check if bridge orientation connects
+      if (toTile.type === 4) {
+        const mech = mechanismMap[toTile.id];
+        if (mech) {
+          // Bridge connects along X axis if rotation 0 or 180, along Z if 90 or 270
+          const alongX = (toX !== fromX);
+          const alongZ = (toZ !== fromZ);
+          const rot = ((mech.rotation % 360) + 360) % 360;
+          const bridgeAlongX = (rot === 0 || rot === 180);
+          if (alongX && !bridgeAlongX) return false;
+          if (alongZ && bridgeAlongX) return false;
+        }
+      }
+
+      // Same check for moving FROM a rotator
+      if (fromTile.type === 4) {
+        const mech = mechanismMap[fromTile.id];
+        if (mech) {
+          const alongX = (toX !== fromX);
+          const alongZ = (toZ !== fromZ);
+          const rot = ((mech.rotation % 360) + 360) % 360;
+          const bridgeAlongX = (rot === 0 || rot === 180);
+          if (alongX && !bridgeAlongX) return false;
+          if (alongZ && bridgeAlongX) return false;
+        }
+      }
+
+      return true;
+    }
+
+    function movePlayer(dx, dz) {
+      if (playerMoving || state !== GameState.PLAYING) return;
+
+      const newX = playerPos.x + dx;
+      const newZ = playerPos.z + dz;
+
+      if (canMoveTo(playerPos.x, playerPos.z, newX, newZ)) {
+        const newH = getTileHeight(newX, newZ);
+        playerTarget = { x: newX, z: newZ, h: newH };
+        playerMoving = true;
+        playMoveSound();
+      }
+    }
+
+    function updatePlayerMovement(dt) {
+      if (!playerMoving || !playerTarget) return;
+
+      const targetWorld = gridToWorld(playerTarget.x, playerTarget.z, playerTarget.h);
+      const currentPos = player.position;
+
+      const dx = targetWorld.x - currentPos.x;
+      const dy = targetWorld.y - currentPos.y;
+      const dz = targetWorld.z - currentPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      const step = PLAYER_SPEED * TILE_SIZE * dt;
+
+      if (dist < step) {
+        // Arrived
+        player.position.set(targetWorld.x, targetWorld.y, targetWorld.z);
+        playerPos = { ...playerTarget };
+        playerMoving = false;
+        playerTarget = null;
+
+        // Check win
+        const tile = getTileAt(playerPos.x, playerPos.z);
+        if (tile && tile.type === 3) {
+          onLevelWin();
+        }
+      } else {
+        // Move toward target
+        const nx = dx / dist;
+        const nz = dz / dist;
+        player.position.x += nx * step;
+        player.position.z += nz * step;
+        // Smooth Y
+        player.position.y += dy * Math.min(1, step / Math.max(dist, 0.01));
+
+        // Rotate player to face movement direction
+        const angle = Math.atan2(nx, nz);
+        player.rotation.y = angle;
+      }
+
+      // Bobbing animation
+      const bobAmount = 0.05;
+      const bobSpeed = 12;
+      const baseY = targetWorld.y - dy * (1 - Math.min(1, step / Math.max(dist, 0.01)));
+      // approximate: just add sine
+    }
+
+    // ---------- Mechanism Interactions ----------
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function handleClick(event) {
+      if (state !== GameState.PLAYING) return;
+      initAudio();
+
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(levelGroup.children, true);
+
+      for (const hit of intersects) {
+        // Find parent tile group
+        let obj = hit.object;
+        while (obj && !obj.userData.isTile) {
+          obj = obj.parent;
+        }
+        if (obj && obj.userData.tileData) {
+          const tile = obj.userData.tileData;
+          if (tile.type === 4 || tile.type === 5) {
+            activateMechanism(tile.id);
+            return;
+          }
+        }
+      }
+    }
+
+    function activateMechanism(id) {
+      const mech = mechanismMap[id];
+      if (!mech) return;
+
+      // Don't activate if player is on it (safety)
+      const tile = getTileAt(mech.tileX, mech.tileZ);
+      if (playerPos.x === mech.tileX && playerPos.z === mech.tileZ) {
+        // Allow elevator activation when standing on it
+        if (mech.type !== 'elevator') return;
+      }
+
+      playMechanismSound();
+
+      if (mech.type === 'rotator') {
+        mech.rotation = (mech.rotation + 90) % 360;
+        animateRotator(id);
+      } else if (mech.type === 'elevator') {
+        if (mech.moving) return;
+        mech.moving = true;
+        const targetH = mech.currentH === mech.baseH ? mech.topH : mech.baseH;
+        animateElevator(id, targetH);
+      }
+    }
+
+    function animateRotator(id) {
+      const mech = mechanismMap[id];
+      const tile = getTileAt(mech.tileX, mech.tileZ);
+      if (!tile) return;
+
+      const targetRot = mech.rotation * Math.PI / 180;
+      const mesh = tile.mesh;
+      const startRot = mesh.rotation.y;
+      const duration = 500;
+      const startTime = performance.now();
+
+      function step() {
+        const elapsed = performance.now() - startTime;
+        const t = Math.min(1, elapsed / duration);
+        // Ease out cubic
+        const eased = 1 - Math.pow(1 - t, 3);
+        mesh.rotation.y = startRot + (targetRot - startRot) * eased;
+
+        if (t < 1) {
+          requestAnimationFrame(step);
+        }
+      }
+      step();
+    }
+
+    function animateElevator(id, targetH) {
+      const mech = mechanismMap[id];
+      const tile = getTileAt(mech.tileX, mech.tileZ);
+      if (!tile) return;
+
+      const mesh = tile.mesh;
+      const startY = mesh.position.y;
+      const targetWorldY = gridToWorld(mech.tileX, mech.tileZ, targetH).y - TILE_HEIGHT / 2;
+      const duration = 800;
+      const startTime = performance.now();
+      const startH = mech.currentH;
+
+      // If player is on elevator, move player too
+      const playerOnElevator = (playerPos.x === mech.tileX && playerPos.z === mech.tileZ);
+
+      function step() {
+        const elapsed = performance.now() - startTime;
+        const t = Math.min(1, elapsed / duration);
+        // Ease in-out cubic
+        const eased = t < 0.5
+          ? 4 * t * t * t
+          : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        mesh.position.y = startY + (targetWorldY - startY) * eased;
+
+        // Update tile height for collision
+        tile.currentH = startH + (targetH - startH) * eased;
+
+        // Move player if on elevator
+        if (playerOnElevator && !playerMoving) {
+          player.position.y = mesh.position.y + TILE_HEIGHT / 2 + 0.01;
+          playerPos.h = tile.currentH;
+        }
+
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          mech.currentH = targetH;
+          tile.currentH = targetH;
+          mech.moving = false;
+        }
+      }
+      step();
+    }
+
+    // ---------- Game Flow ----------
+    function startGame(levelIndex) {
+      initAudio();
+      startBGM();
+      currentLevel = levelIndex;
+      buildLevel(levelIndex);
+      state = GameState.PLAYING;
+
+      // UI
+      document.getElementById('menuScreen').classList.remove('active');
+      document.getElementById('levelScreen').classList.remove('active');
+      document.getElementById('winScreen').classList.remove('active');
+      document.getElementById('gameHud').style.display = 'flex';
+      document.getElementById('hintText').style.display = 'block';
+      document.getElementById('mobileControls').style.display = '';
+
+      const level = LEVELS[levelIndex];
+      document.getElementById('hudLevel').textContent = `第 ${levelIndex + 1} 关 · ${level.name}`;
+      document.getElementById('hintText').textContent = level.hint;
+
+      // Hide hint after 5s
+      setTimeout(() => {
+        if (state === GameState.PLAYING) {
+          document.getElementById('hintText').style.display = 'none';
+        }
+      }, 5000);
+    }
+
+    function onLevelWin() {
+      state = GameState.WIN;
+      playWinSound();
+
+      // Save progress
+      if (!completedLevels.includes(currentLevel)) {
+        completedLevels.push(currentLevel);
+        try {
+          localStorage.setItem('gm_completed', JSON.stringify(completedLevels));
+        } catch (e) {}
+      }
+
+      const level = LEVELS[currentLevel];
+      document.getElementById('winSubtitle').textContent = `第 ${currentLevel + 1} 关 · ${level.name}`;
+      document.getElementById('winScreen').classList.add('active');
+
+      // If last level, change button text
+      const nextBtn = document.getElementById('nextLevelBtn');
+      if (currentLevel >= LEVELS.length - 1) {
+        nextBtn.textContent = '全部通关 ✦';
+      } else {
+        nextBtn.textContent = '下一关';
+      }
+    }
+
+    function resetLevel() {
+      buildLevel(currentLevel);
+      state = GameState.PLAYING;
+      document.getElementById('winScreen').classList.remove('active');
+    }
+
+    function goToMenu() {
+      state = GameState.MENU;
+      stopBGM();
+      document.getElementById('menuScreen').classList.add('active');
+      document.getElementById('levelScreen').classList.remove('active');
+      document.getElementById('winScreen').classList.remove('active');
+      document.getElementById('gameHud').style.display = 'none';
+      document.getElementById('hintText').style.display = 'none';
+      document.getElementById('mobileControls').style.display = 'none';
+    }
+
+    function goToLevelSelect() {
+      state = GameState.LEVEL_SELECT;
+      updateLevelGrid();
+      document.getElementById('menuScreen').classList.remove('active');
+      document.getElementById('levelScreen').classList.add('active');
+    }
+
+    function updateLevelGrid() {
+      const grid = document.getElementById('levelGrid');
+      grid.innerHTML = '';
+      LEVELS.forEach((level, i) => {
+        const card = document.createElement('div');
+        const isCompleted = completedLevels.includes(i);
+        const isUnlocked = i === 0 || completedLevels.includes(i - 1);
+        card.className = `level-card ${isCompleted ? 'completed' : ''} ${!isUnlocked ? 'locked' : ''}`;
+        card.innerHTML = `
+          <div class="level-num">${isUnlocked ? (i + 1) : '🔒'}</div>
+          <div class="level-name">${level.name}</div>
+        `;
+        if (isUnlocked) {
+          card.addEventListener('click', () => {
+            playClickSound();
+            startGame(i);
+          });
+        }
+        grid.appendChild(card);
+      });
+    }
+
+    // ---------- Input Handling ----------
+    const keys = {};
+    let moveCooldown = 0;
+
+    document.addEventListener('keydown', (e) => {
+      if (state !== GameState.PLAYING) return;
+      initAudio();
+
+      const key = e.key.toLowerCase();
+      if (['w', 'arrowup', 's', 'arrowdown', 'a', 'arrowleft', 'd', 'arrowright', ' '].includes(key)) {
+        e.preventDefault();
+      }
+
+      if (!playerMoving) {
+        if (key === 'w' || key === 'arrowup') movePlayer(0, -1);
+        else if (key === 's' || key === 'arrowdown') movePlayer(0, 1);
+        else if (key === 'a' || key === 'arrowleft') movePlayer(-1, 0);
+        else if (key === 'd' || key === 'arrowright') movePlayer(1, 0);
+        else if (key === 'r') resetLevel();
+      }
+    });
+
+    // Click for mechanisms
+    canvas.addEventListener('click', handleClick);
+
+    // Mobile D-pad
+    document.querySelectorAll('.dpad-btn').forEach(btn => {
+      const dir = btn.dataset.dir;
+      const trigger = () => {
+        if (state !== GameState.PLAYING) return;
+        initAudio();
+        if (dir === 'up') movePlayer(0, -1);
+        else if (dir === 'down') movePlayer(0, 1);
+        else if (dir === 'left') movePlayer(-1, 0);
+        else if (dir === 'right') movePlayer(1, 0);
+      };
+      btn.addEventListener('click', trigger);
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); trigger(); }, { passive: false });
+    });
+
+    // UI buttons
+    document.getElementById('startBtn').addEventListener('click', () => {
+      initAudio();
+      playClickSound();
+      startGame(0);
+    });
+
+    document.getElementById('levelSelectBtn').addEventListener('click', () => {
+      initAudio();
+      playClickSound();
+      goToLevelSelect();
+    });
+
+    document.getElementById('backToMenuBtn').addEventListener('click', () => {
+      playClickSound();
+      goToMenu();
+    });
+
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      playClickSound();
+      goToMenu();
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      playClickSound();
+      resetLevel();
+    });
+
+    document.getElementById('soundBtn').addEventListener('click', () => {
+      initAudio();
+      toggleSound();
+    });
+
+    document.getElementById('replayBtn').addEventListener('click', () => {
+      playClickSound();
+      resetLevel();
+    });
+
+    document.getElementById('nextLevelBtn').addEventListener('click', () => {
+      playClickSound();
+      if (currentLevel < LEVELS.length - 1) {
+        startGame(currentLevel + 1);
+      } else {
+        goToMenu();
+      }
+    });
+
+    document.getElementById('winMenuBtn').addEventListener('click', () => {
+      playClickSound();
+      goToMenu();
+    });
+
+    // ---------- Animation Loop ----------
+    let lastTime = performance.now();
+    let goalPulseTime = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      if (state === GameState.PLAYING) {
+        updatePlayerMovement(dt);
+        controls.update();
+
+        // Animate goal marker
+        goalPulseTime += dt;
+        if (levelGroup) {
+          levelGroup.traverse(obj => {
+            if (obj.name === 'goalMarker') {
+              obj.rotation.y += dt * 1.5;
+              obj.position.y = TILE_HEIGHT * 0.9 + Math.sin(goalPulseTime * 2) * 0.1;
+            }
+            if (obj.name === 'goalLight') {
+              obj.intensity = 0.5 + Math.sin(goalPulseTime * 3) * 0.2;
+            }
+            if (obj.name === 'mechIndicator') {
+              obj.rotation.z += dt * 1.2;
+            }
+          });
+        }
+
+        // Player idle bobbing
+        if (player && !playerMoving) {
+          player.position.y += Math.sin(now * 0.003) * 0.002;
+        }
+      } else if (state === GameState.MENU || state === GameState.LEVEL_SELECT) {
+        // Gentle camera orbit on menu
+        if (levelGroup) {
+          levelGroup.rotation.y += dt * 0.05;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    // ---------- Window Resize ----------
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ---------- Init ----------
+    function loadProgress() {
+      try {
+        const saved = localStorage.getItem('gm_completed');
+        if (saved) {
+          completedLevels = JSON.parse(saved);
+        }
+      } catch (e) {}
+    }
+
+    // Build a decorative scene for menu background
+    function buildMenuScene() {
+      if (levelGroup) {
+        scene.remove(levelGroup);
+      }
+      levelGroup = new THREE.Group();
+
+      // Floating decorative platforms
+      const decorTiles = [
+        { x: 0, z: 0, h: 0, color: COLORS.accent },
+        { x: 2, z: 1, h: 1, color: COLORS.pink },
+        { x: -2, z: 1, h: 0.5, color: COLORS.green },
+        { x: 1, z: -2, h: 1.5, color: COLORS.yellow },
+        { x: -1, z: -1, h: 2, color: COLORS.accent },
+        { x: 3, z: -1, h: 0.3, color: COLORS.pink },
+        { x: -3, z: -2, h: 1, color: COLORS.green },
+      ];
+
+      decorTiles.forEach(t => {
+        const geo = new THREE.BoxGeometry(TILE_SIZE * 0.9, TILE_HEIGHT, TILE_SIZE * 0.9);
+        const mat = new THREE.MeshLambertMaterial({ color: t.color });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(t.x * TILE_SIZE, t.h * TILE_HEIGHT, t.z * TILE_SIZE);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        levelGroup.add(mesh);
+
+        // Top
+        const topGeo = new THREE.BoxGeometry(TILE_SIZE * 0.85, TILE_HEIGHT * 0.15, TILE_SIZE * 0.85);
+        const topMat = new THREE.MeshLambertMaterial({ color: 0xf5efe6 });
+        const top = new THREE.Mesh(topGeo, topMat);
+        top.position.set(t.x * TILE_SIZE, t.h * TILE_HEIGHT + TILE_HEIGHT * 0.4, t.z * TILE_SIZE);
+        levelGroup.add(top);
+      });
+
+      // Decorative player-like figure
+      const figure = createPlayer();
+      figure.position.set(0, TILE_HEIGHT * 0.3, 0);
+      levelGroup.add(figure);
+
+      scene.add(levelGroup);
+
+      camera.position.set(8, 7, 10);
+      controls.target.set(0, 1, 0);
+      controls.update();
+    }
+
+    loadProgress();
+    buildMenuScene();
+    animate();
+
+    // Handle visibility change — pause when tab hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Game naturally pauses since no input, but we can reduce bgm
+        if (bgmGain && soundEnabled) {
+          bgmGain.gain.setTargetAtTime(0.01, audioCtx.currentTime, 0.5);
+        }
+      } else {
+        if (bgmGain && soundEnabled && state === GameState.PLAYING) {
+          bgmGain.gain.setTargetAtTime(0.025, audioCtx.currentTime, 0.5);
+        }
+      }
+    });
+
+    </script>
+  </body>
+</html>
